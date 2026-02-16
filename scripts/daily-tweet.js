@@ -2,40 +2,16 @@ const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
 const { TwitterApi } = require('twitter-api-v2');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const follow = (u) => {
-      https.get(u, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          follow(res.headers.location);
-          return;
-        }
-        const file = fs.createWriteStream(dest);
-        res.pipe(file);
-        file.on('finish', () => { file.close(); resolve(); });
-      }).on('error', reject);
-    };
-    follow(url);
-  });
-}
 
 async function main() {
-  const fontDir = '/tmp/fonts';
-  if (!fs.existsSync(fontDir)) fs.mkdirSync(fontDir);
-
-  await download(
-    'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtbK-F2rA0s.ttf',
-    path.join(fontDir, 'Playfair-Italic.ttf')
-  );
-  GlobalFonts.registerFromPath(path.join(fontDir, 'Playfair-Italic.ttf'), 'PlayfairItalic');
-
-  // "Playfair Display" is already available on the runner as a system font
-  // Use PlayfairItalic for quote text, Playfair Display for author/watermark
   const families = GlobalFonts.families.map(f => f.family);
-  console.log('Has PlayfairItalic:', families.includes('PlayfairItalic'));
-  console.log('Has Playfair Display:', families.includes('Playfair Display'));
+  console.log('Available fonts:', families.join(', '));
+
+  const SERIF = 'Liberation Serif';
+  const SANS = 'Liberation Sans';
+
+  if (!families.includes(SERIF)) throw new Error(`Missing ${SERIF}`);
+  if (!families.includes(SANS)) throw new Error(`Missing ${SANS}`);
 
   // Load quotes, Pacific time
   const quotes = JSON.parse(
@@ -51,7 +27,7 @@ async function main() {
 
   console.log(`Pacific: ${pacific.toISOString().split('T')[0]}, idx: ${idx}`);
   console.log(`Quote: "${q.q.substring(0, 60)}..."`);
-  console.log(`Author: ${q.a}`);
+  console.log(`Author: "${q.a}"`);
 
   // --- Canvas ---
   const W = 1080, H = 1080;
@@ -63,10 +39,10 @@ async function main() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
 
-  // Word wrap
-  const fontSize = q.q.length > 300 ? 32 : q.q.length > 150 ? 38 : 44;
-  ctx.font = `${fontSize}px PlayfairItalic`;
-  const maxWidth = W - 180;
+  // Word wrap the quote
+  const fontSize = q.q.length > 300 ? 30 : q.q.length > 150 ? 36 : 42;
+  ctx.font = `italic ${fontSize}px "${SERIF}"`;
+  const maxWidth = W - 200;
   const words = q.q.split(' ');
   const lines = [];
   let line = '';
@@ -81,67 +57,67 @@ async function main() {
   }
   if (line) lines.push(line);
 
-  // Vertical measurements
-  const openQuoteH = 90;
-  const gapOpenToText = 35;
-  const lineH = Math.round(fontSize * 1.7);
+  // Layout measurements
+  const lineH = Math.round(fontSize * 1.75);
   const textBlockH = lines.length * lineH;
-  const gapTextToClose = 20;
-  const closeQuoteH = 90;
-  const gapCloseToRule = 45;
-  const ruleH = 1;
-  const gapRuleToAuthor = 35;
-  const authorH = 24;
 
-  const totalH = openQuoteH + gapOpenToText + textBlockH + gapTextToClose
-    + closeQuoteH + gapCloseToRule + ruleH + gapRuleToAuthor + authorH;
+  const openH = 80;
+  const gapOpen = 30;
+  const gapClose = 15;
+  const closeH = 80;
+  const gapRule = 40;
+  const gapAuthor = 30;
+  const authorH = 20;
 
+  const totalH = openH + gapOpen + textBlockH + gapClose + closeH + gapRule + 1 + gapAuthor + authorH;
   let y = Math.round((H - totalH) / 2);
 
-  // Open quote
-  ctx.font = '100px PlayfairItalic';
-  ctx.fillStyle = 'rgba(200,168,110,0.4)';
+  // Open quote mark
+  ctx.font = `italic 90px "${SERIF}"`;
+  ctx.fillStyle = '#c8a86e';
   ctx.fillText('\u201C', W / 2, y);
-  y += openQuoteH + gapOpenToText;
+  y += openH + gapOpen;
 
-  // Quote lines
-  ctx.font = `${fontSize}px PlayfairItalic`;
+  // Quote text
+  ctx.font = `italic ${fontSize}px "${SERIF}"`;
   ctx.fillStyle = '#f0ebe3';
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], W / 2, y + i * lineH);
   }
-  y += textBlockH + gapTextToClose;
+  y += textBlockH + gapClose;
 
-  // Close quote
-  ctx.font = '100px PlayfairItalic';
-  ctx.fillStyle = 'rgba(200,168,110,0.4)';
+  // Close quote mark
+  ctx.font = `italic 90px "${SERIF}"`;
+  ctx.fillStyle = '#c8a86e';
   ctx.fillText('\u201D', W / 2, y);
-  y += closeQuoteH + gapCloseToRule;
+  y += closeH + gapRule;
 
-  // Rule
-  ctx.strokeStyle = 'rgba(200,168,110,0.35)';
+  // Rule line
+  ctx.strokeStyle = '#c8a86e';
+  ctx.globalAlpha = 0.4;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(W / 2 - 30, y);
   ctx.lineTo(W / 2 + 30, y);
   ctx.stroke();
-  y += ruleH + gapRuleToAuthor;
+  ctx.globalAlpha = 1.0;
+  y += 1 + gapAuthor;
 
-  // Author - using Playfair Display (system font, confirmed available)
-  ctx.font = '20px "Playfair Display"';
-  ctx.fillStyle = 'rgba(240,235,227,0.7)';
+  // Author - sans-serif, larger, crisp
+  ctx.font = `18px "${SANS}"`;
+  ctx.fillStyle = '#b0a898';
   ctx.fillText(q.a.toUpperCase(), W / 2, y);
-  console.log(`Author drawn at y=${y}`);
+  console.log(`Author "${q.a.toUpperCase()}" drawn at y=${y}`);
 
-  // Watermark
-  ctx.font = '13px "Playfair Display"';
-  ctx.fillStyle = 'rgba(240,235,227,0.12)';
-  ctx.fillText('AXITOME', W / 2, H - 60);
+  // AXITOME watermark - sans-serif, larger, crisp
+  ctx.font = `16px "${SANS}"`;
+  ctx.fillStyle = '#3a3835';
+  ctx.fillText('AXITOME', W / 2, H - 55);
 
   // Save
   const imagePath = '/tmp/quote-card.png';
   fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
-  console.log('Card saved');
+  console.log('Card saved, size:', fs.statSync(imagePath).size, 'bytes');
 
   // --- Tweet ---
   const client = new TwitterApi({
