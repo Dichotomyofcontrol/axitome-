@@ -2,10 +2,9 @@ name: Daily Quote Tweet
 
 on:
   schedule:
-    # Runs at 8:00 AM Pacific (16:00 UTC) every day
-    # Adjust the hour if you want a different post time
+    # 8:00 AM Pacific (16:00 UTC) every day
     - cron: '0 13 * * *'
-  workflow_dispatch: # Allows manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   tweet:
@@ -18,9 +17,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          npm install puppeteer twitter-api-v2
-          npx puppeteer browsers install chrome
+        run: npm install @napi-rs/canvas twitter-api-v2
 
       - name: Generate quote image and tweet
         env:
