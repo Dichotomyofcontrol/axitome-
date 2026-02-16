@@ -15,7 +15,7 @@ async function main() {
   const dayIndex = Math.floor((today - startDate) / 86400000) % quotes.length;
   const quote = quotes[dayIndex];
 
-  console.log(`Today's quote (#${dayIndex}): "${quote.quote.substring(0, 50)}..." — ${quote.author}`);
+  console.log(`Today's quote (#${dayIndex}): "${quote.q.substring(0, 50)}..." — ${quote.a}`);
 
   // --- 2. Screenshot the quote card ---
   const browser = await puppeteer.launch({
@@ -61,8 +61,8 @@ async function main() {
 
   // Compose tweet text
   // Trim quote if too long for tweet (280 char limit minus link and author)
-  let tweetQuote = quote.quote;
-  const author = quote.author;
+  let tweetQuote = quote.q;
+  const author = quote.a;
   const link = `\n\naxitome.com/#${dateStr}`;
   const maxQuoteLen = 280 - author.length - link.length - 6; // 6 for quotes and dash
 
