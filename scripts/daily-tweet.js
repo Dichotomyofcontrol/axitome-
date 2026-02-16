@@ -22,132 +22,139 @@ function download(url, dest) {
 }
 
 async function main() {
-  // --- 1. Download and register fonts ---
   const fontDir = '/tmp/fonts';
   if (!fs.existsSync(fontDir)) fs.mkdirSync(fontDir);
 
-  console.log('Downloading fonts...');
+  // Download TWO variants of Playfair - italic for quote, regular for author
   await download(
     'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtbK-F2rA0s.ttf',
-    path.join(fontDir, 'PlayfairDisplay-Italic.ttf')
+    path.join(fontDir, 'Playfair-Italic.ttf')
   );
   await download(
-    'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZOIHTWEBlwu8Q.ttf',
-    path.join(fontDir, 'DMSans-Regular.ttf')
+    'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKd3vXDXbtXK-F2qC0s.ttf',
+    path.join(fontDir, 'Playfair-Regular.ttf')
   );
 
-  GlobalFonts.registerFromPath(path.join(fontDir, 'PlayfairDisplay-Italic.ttf'), 'Playfair');
-  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Regular.ttf'), 'DMSans');
-  console.log('Fonts registered');
+  GlobalFonts.registerFromPath(path.join(fontDir, 'Playfair-Italic.ttf'), 'PlayfairItalic');
+  GlobalFonts.registerFromPath(path.join(fontDir, 'Playfair-Regular.ttf'), 'PlayfairRegular');
 
-  // --- 2. Load quotes, Pacific time ---
+  // Verify fonts loaded
+  const families = GlobalFonts.families.map(f => f.family);
+  console.log('Fonts:', families.join(', '));
+  if (!families.includes('PlayfairItalic') || !families.includes('PlayfairRegular')) {
+    throw new Error('Font registration failed');
+  }
+
+  // Load quotes, Pacific time
   const quotes = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'public', 'quotes.json'), 'utf8')
   );
-
   const nowUTC = new Date();
   const pacific = new Date(nowUTC.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
   pacific.setHours(0, 0, 0, 0);
-
   const epoch = new Date(2026, 0, 1);
   const dayIndex = Math.floor((pacific - epoch) / 86400000);
   const idx = dayIndex % quotes.length;
   const q = quotes[idx];
 
-  console.log(`Pacific date: ${pacific.toISOString().split('T')[0]}`);
-  console.log(`Day index: ${dayIndex}, Quote #${idx}`);
-  console.log(`"${q.q.substring(0, 60)}..." — ${q.a}`);
+  console.log(`Pacific: ${pacific.toISOString().split('T')[0]}, idx: ${idx}`);
+  console.log(`Quote: "${q.q.substring(0, 60)}..."`);
+  console.log(`Author: ${q.a}`);
 
-  // --- 3. Generate 1080x1080 quote card ---
+  // --- Canvas ---
   const W = 1080, H = 1080;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  // Flat background
   ctx.fillStyle = '#111010';
   ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'top'; // Critical: all measurements from top, not baseline
 
-  // Word-wrap the quote first to know total height
+  // Word wrap
   const fontSize = q.q.length > 300 ? 32 : q.q.length > 150 ? 38 : 44;
-  ctx.font = `italic ${fontSize}px Playfair`;
-
+  ctx.font = `${fontSize}px PlayfairItalic`;
   const maxWidth = W - 180;
   const words = q.q.split(' ');
   const lines = [];
   let line = '';
-  for (let i = 0; i < words.length; i++) {
-    const test = line + (line ? ' ' : '') + words[i];
+  for (const word of words) {
+    const test = line + (line ? ' ' : '') + word;
     if (ctx.measureText(test).width > maxWidth && line) {
       lines.push(line);
-      line = words[i];
+      line = word;
     } else {
       line = test;
     }
   }
   if (line) lines.push(line);
 
-  const lineHeight = fontSize * 1.7;
+  // Define all vertical measurements
+  const openQuoteH = 90;
+  const gapOpenToText = 35;
+  const lineH = Math.round(fontSize * 1.7);
+  const textBlockH = lines.length * lineH;
+  const gapTextToClose = 20;
+  const closeQuoteH = 90;
+  const gapCloseToRule = 45;
+  const ruleH = 1;
+  const gapRuleToAuthor = 35;
+  const authorH = 24;
 
-  // Calculate total block height, then center it
-  const qmarkHeight = 100;     // open quote mark
-  const gapAfterOpen = 40;     // space between open mark and text
-  const textBlockH = lines.length * lineHeight;
-  const gapBeforeClose = 30;   // space between text and close mark
-  const closeMarkH = 80;       // close quote mark
-  const gapBeforeRule = 50;    // space before rule line
-  const ruleToAuthor = 45;     // space from rule to author
+  const totalH = openQuoteH + gapOpenToText + textBlockH + gapTextToClose
+    + closeQuoteH + gapCloseToRule + ruleH + gapRuleToAuthor + authorH;
 
-  const totalH = qmarkHeight + gapAfterOpen + textBlockH + gapBeforeClose + closeMarkH + gapBeforeRule + ruleToAuthor + 24;
-  const topY = (H - totalH) / 2;
+  let y = Math.round((H - totalH) / 2);
 
-  let y = topY;
+  // --- Draw ---
 
-  // Opening quote mark
+  // Open quote mark
+  ctx.font = '100px PlayfairItalic';
   ctx.fillStyle = 'rgba(200,168,110,0.4)';
-  ctx.font = 'italic 140px Playfair';
-  ctx.fillText('\u201C', W / 2, y + qmarkHeight);
-  y += qmarkHeight + gapAfterOpen;
+  ctx.fillText('\u201C', W / 2, y);
+  y += openQuoteH + gapOpenToText;
 
   // Quote lines
+  ctx.font = `${fontSize}px PlayfairItalic`;
   ctx.fillStyle = '#f0ebe3';
-  ctx.font = `italic ${fontSize}px Playfair`;
   for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], W / 2, y + (i + 1) * lineHeight);
+    ctx.fillText(lines[i], W / 2, y + i * lineH);
   }
-  y += textBlockH + gapBeforeClose;
+  y += textBlockH + gapTextToClose;
 
-  // Closing quote mark
+  // Close quote mark
+  ctx.font = '100px PlayfairItalic';
   ctx.fillStyle = 'rgba(200,168,110,0.4)';
-  ctx.font = 'italic 140px Playfair';
-  ctx.fillText('\u201D', W / 2, y + closeMarkH);
-  y += closeMarkH + gapBeforeRule;
+  ctx.fillText('\u201D', W / 2, y);
+  y += closeQuoteH + gapCloseToRule;
 
-  // Rule line
+  // Rule
   ctx.strokeStyle = 'rgba(200,168,110,0.35)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(W / 2 - 30, y);
   ctx.lineTo(W / 2 + 30, y);
   ctx.stroke();
+  y += ruleH + gapRuleToAuthor;
 
   // Author
-  y += ruleToAuthor;
+  ctx.font = '20px PlayfairRegular';
   ctx.fillStyle = 'rgba(240,235,227,0.7)';
-  ctx.font = '24px DMSans';
-  ctx.fillText(q.a.toUpperCase(), W / 2, y);
+  const authorText = q.a.toUpperCase();
+  ctx.fillText(authorText, W / 2, y);
+  console.log(`Drew author "${authorText}" at y=${y}`);
 
-  // AXITOME watermark (always at bottom)
-  ctx.fillStyle = 'rgba(240,235,227,0.15)';
-  ctx.font = '14px DMSans';
-  ctx.fillText('AXITOME', W / 2, H - 50);
+  // Watermark pinned to bottom
+  ctx.font = '13px PlayfairRegular';
+  ctx.fillStyle = 'rgba(240,235,227,0.12)';
+  ctx.fillText('AXITOME', W / 2, H - 60);
 
   // Save
   const imagePath = '/tmp/quote-card.png';
   fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
-  console.log('Quote card generated');
+  console.log('Card saved');
 
-  // --- 4. Post to Twitter ---
+  // --- Tweet ---
   const client = new TwitterApi({
     appKey: process.env.TWITTER_API_KEY,
     appSecret: process.env.TWITTER_API_SECRET,
@@ -156,12 +163,10 @@ async function main() {
   });
 
   const mediaId = await client.v1.uploadMedia(imagePath);
-  console.log('Image uploaded');
 
   let tweetQuote = q.q;
   const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
   const maxLen = 280 - suffix.length - 2;
-
   if (tweetQuote.length > maxLen) {
     tweetQuote = tweetQuote.substring(0, maxLen - 3) + '...';
   }
@@ -173,7 +178,7 @@ async function main() {
     media: { media_ids: [mediaId] },
   });
 
-  console.log('Tweet posted!');
+  console.log('Posted!');
   console.log(tweetText);
 }
 
