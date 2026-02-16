@@ -1,10 +1,46 @@
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
 const { TwitterApi } = require('twitter-api-v2');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+
+function download(url, dest) {
+  return new Promise((resolve, reject) => {
+    const follow = (u) => {
+      https.get(u, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          follow(res.headers.location);
+          return;
+        }
+        const file = fs.createWriteStream(dest);
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+      }).on('error', reject);
+    };
+    follow(url);
+  });
+}
 
 async function main() {
-  // --- 1. Load quotes and find today's ---
+  // --- 1. Download fonts ---
+  const fontDir = '/tmp/fonts';
+  if (!fs.existsSync(fontDir)) fs.mkdirSync(fontDir);
+
+  console.log('Downloading fonts...');
+  await download(
+    'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtbK-F2rA0s.ttf',
+    path.join(fontDir, 'PlayfairDisplay-Italic.ttf')
+  );
+  await download(
+    'https://fonts.gstatic.com/s/dmsans/v15/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAop-hSA.ttf',
+    path.join(fontDir, 'DMSans-Light.ttf')
+  );
+
+  GlobalFonts.registerFromPath(path.join(fontDir, 'PlayfairDisplay-Italic.ttf'), 'Playfair');
+  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Light.ttf'), 'DMSans');
+  console.log('Fonts loaded');
+
+  // --- 2. Load quotes and find today's ---
   const quotes = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'public', 'quotes.json'), 'utf8')
   );
@@ -17,7 +53,7 @@ async function main() {
 
   console.log(`Today's quote (#${dayIndex}): "${q.q.substring(0, 50)}..." — ${q.a}`);
 
-  // --- 2. Generate 1080x1080 quote card (matches site's genCard()) ---
+  // --- 3. Generate 1080x1080 quote card ---
   const W = 1080, H = 1080;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
@@ -39,14 +75,14 @@ async function main() {
 
   // Opening quote mark
   ctx.fillStyle = 'rgba(200,168,110,0.35)';
-  ctx.font = 'italic 140px Georgia, serif';
+  ctx.font = 'italic 140px "Playfair"';
   ctx.textAlign = 'center';
   ctx.fillText('\u201C', W / 2, 240);
 
   // Quote text
   ctx.fillStyle = '#f0ebe3';
   const fontSize = q.q.length > 300 ? 32 : q.q.length > 150 ? 38 : 44;
-  ctx.font = `italic ${fontSize}px Georgia, serif`;
+  ctx.font = `italic ${fontSize}px "Playfair"`;
 
   const maxWidth = W - 180;
   const words = q.q.split(' ');
@@ -73,7 +109,7 @@ async function main() {
 
   // Closing quote mark
   ctx.fillStyle = 'rgba(200,168,110,0.35)';
-  ctx.font = 'italic 140px Georgia, serif';
+  ctx.font = 'italic 140px "Playfair"';
   ctx.fillText('\u201D', W / 2, startY + lines.length * lineHeight + 60);
 
   // Rule line
@@ -87,19 +123,19 @@ async function main() {
 
   // Author
   ctx.fillStyle = 'rgba(240,235,227,0.5)';
-  ctx.font = '300 22px sans-serif';
+  ctx.font = '22px "DMSans"';
   ctx.fillText(q.a.toUpperCase(), W / 2, ruleY + 45);
 
   // Tags
   if (q.t && q.t.length) {
     ctx.fillStyle = 'rgba(200,168,110,0.25)';
-    ctx.font = '200 16px sans-serif';
+    ctx.font = '16px "DMSans"';
     ctx.fillText(q.t.map(t => '#' + t).join('  '), W / 2, ruleY + 80);
   }
 
   // AXITOME watermark
   ctx.fillStyle = 'rgba(240,235,227,0.12)';
-  ctx.font = '200 14px sans-serif';
+  ctx.font = '14px "DMSans"';
   ctx.fillText('AXITOME', W / 2, H - 50);
 
   // Save image
@@ -108,7 +144,7 @@ async function main() {
   fs.writeFileSync(imagePath, buffer);
   console.log('Quote card generated');
 
-  // --- 3. Post to Twitter ---
+  // --- 4. Post to Twitter ---
   const client = new TwitterApi({
     appKey: process.env.TWITTER_API_KEY,
     appSecret: process.env.TWITTER_API_SECRET,
@@ -116,11 +152,9 @@ async function main() {
     accessSecret: process.env.TWITTER_ACCESS_SECRET,
   });
 
-  // Upload image
   const mediaId = await client.v1.uploadMedia(imagePath);
   console.log('Image uploaded, mediaId:', mediaId);
 
-  // Build tweet text
   const dateStr = today.toISOString().split('T')[0];
   let tweetQuote = q.q;
   const link = `\n\naxitome.com/#${dateStr}`;
