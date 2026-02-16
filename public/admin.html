@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Axitome Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#111010;color:#f5f1eb;font-family:system-ui,-apple-system,sans-serif;padding:2rem;min-height:100vh}
+h1{font-size:1.4rem;font-weight:300;letter-spacing:.2em;text-transform:uppercase;margin-bottom:.5rem;color:#c8a86e}
+.subtitle{font-size:.75rem;color:rgba(245,241,235,.4);margin-bottom:2rem}
+.login{max-width:360px;margin:4rem auto;text-align:center}
+.login h1{margin-bottom:1.5rem}
+input[type=password]{width:100%;background:#1e1c1a;border:1px solid rgba(245,241,235,.15);color:#f5f1eb;padding:.8rem 1rem;border-radius:8px;font-size:.9rem;outline:none;margin-bottom:1rem}
+input[type=password]:focus{border-color:rgba(200,168,110,.5)}
+button{background:#c8a86e;border:none;color:#111010;padding:.7rem 1.5rem;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:500;letter-spacing:.05em}
+button:hover{background:#d4b578}
+.error{color:#c75050;font-size:.75rem;margin-top:.5rem}
+.stats{display:flex;gap:2rem;margin-bottom:2rem}
+.stat{background:#1e1c1a;border:1px solid rgba(245,241,235,.1);border-radius:12px;padding:1.2rem 1.5rem;min-width:140px}
+.stat-val{font-size:1.8rem;font-weight:200;color:#c8a86e;font-family:'JetBrains Mono',monospace}
+.stat-lbl{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(245,241,235,.35);margin-top:.3rem}
+.quote-row{display:flex;align-items:flex-start;gap:1.2rem;padding:1rem 1.2rem;background:#1e1c1a;border:1px solid rgba(245,241,235,.08);border-radius:10px;margin-bottom:.5rem;transition:border-color .2s}
+.quote-row:hover{border-color:rgba(200,168,110,.3)}
+.rank{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:rgba(245,241,235,.25);min-width:24px;padding-top:.3rem}
+.count{font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:#c8a86e;min-width:48px;text-align:center;padding-top:.2rem}
+.count-lbl{font-size:.45rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(245,241,235,.25);text-align:center}
+.quote-info{flex:1;min-width:0}
+.quote-text{font-style:italic;font-size:.85rem;line-height:1.6;color:rgba(245,241,235,.8);margin-bottom:.4rem}
+.quote-author{font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(245,241,235,.4)}
+.quote-date{font-size:.6rem;color:rgba(245,241,235,.2);margin-top:.2rem}
+.empty{text-align:center;color:rgba(245,241,235,.3);font-style:italic;padding:3rem}
+</style>
+</head>
+<body>
+<div class="login" id="loginView">
+  <h1>Axitome Admin</h1>
+  <input type="password" id="keyInput" placeholder="Admin key">
+  <br>
+  <button onclick="doLogin()">Enter</button>
+  <div class="error" id="error"></div>
+</div>
+<div id="dashboard" style="display:none;max-width:800px;margin:0 auto">
+  <h1>Axitome Admin</h1>
+  <div class="subtitle" id="updated"></div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="totalLikes">-</div><div class="stat-lbl">Total likes</div></div>
+    <div class="stat"><div class="stat-val" id="totalQuotes">-</div><div class="stat-lbl">Liked quotes</div></div>
+  </div>
+  <div id="list"></div>
+</div>
+<script>
+var adminKey='',quotes=[];
+var EPOCH=new Date(2026,0,1);
+function idxToDate(i){var d=new Date(EPOCH);d.setDate(d.getDate()+i);return d}
+
+async function doLogin(){
+  adminKey=document.getElementById('keyInput').value;
+  if(!adminKey){document.getElementById('error').textContent='Enter a key';return}
+  try{
+    var r=await fetch('/api/admin?key='+encodeURIComponent(adminKey));
+    if(!r.ok){document.getElementById('error').textContent='Invalid key';return}
+    var data=await r.json();
+    var qr=await fetch('/quotes.json');
+    quotes=await qr.json();
+    render(data);
+  }catch(e){document.getElementById('error').textContent='Connection error'}
+}
+
+document.getElementById('keyInput').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin()});
+
+function render(data){
+  document.getElementById('loginView').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('totalLikes').textContent=data.total_likes;
+  document.getElementById('totalQuotes').textContent=data.quotes.length;
+  document.getElementById('updated').textContent='Updated '+new Date().toLocaleString();
+  var html='';
+  if(!data.quotes.length){html='<div class="empty">No likes yet</div>'}
+  else{data.quotes.forEach(function(e,i){
+    var q=quotes[e.idx];
+    if(!q)return;
+    var d=idxToDate(e.idx);
+    var dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    html+='<div class="quote-row">'
+      +'<div class="rank">#'+(i+1)+'</div>'
+      +'<div><div class="count">'+e.count+'</div><div class="count-lbl">likes</div></div>'
+      +'<div class="quote-info">'
+      +'<div class="quote-text">'+escH(q.q)+'</div>'
+      +'<div class="quote-author">'+escH(q.a)+'</div>'
+      +'<div class="quote-date">'+dateStr+'</div>'
+      +'</div></div>';
+  })}
+  document.getElementById('list').innerHTML=html;
+}
+function escH(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+</script>
+</body>
+</html>
