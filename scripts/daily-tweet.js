@@ -4,6 +4,12 @@ const fs = require('fs');
 const path = require('path');
 
 async function main() {
+console.log('API Key exists:', !!process.env.TWITTER_API_KEY);
+console.log('API Secret exists:', !!process.env.TWITTER_API_SECRET);
+console.log('Access Token exists:', !!process.env.TWITTER_ACCESS_TOKEN);
+console.log('Access Secret exists:', !!process.env.TWITTER_ACCESS_SECRET);
+  
+  
   // --- 1. Load quotes and find today's ---
   const quotes = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'public', 'quotes.json'), 'utf8')
