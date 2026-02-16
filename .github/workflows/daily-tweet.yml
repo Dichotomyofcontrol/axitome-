@@ -2,8 +2,7 @@ name: Daily Quote Tweet
 
 on:
   schedule:
-    # 8:00 AM Pacific (16:00 UTC) every day
-    - cron: '0 13 * * *'
+    - cron: '0 16 * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,7 +16,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install @napi-rs/canvas twitter-api-v2
+        run: npm install twitter-api-v2
 
       - name: Generate quote image and tweet
         env:
