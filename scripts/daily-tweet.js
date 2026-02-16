@@ -27,41 +27,29 @@ async function main() {
   if (!fs.existsSync(fontDir)) fs.mkdirSync(fontDir);
 
   console.log('Downloading fonts...');
-
-  // Playfair Display Regular Italic
   await download(
     'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtbK-F2rA0s.ttf',
     path.join(fontDir, 'PlayfairDisplay-Italic.ttf')
   );
-  // DM Sans Regular
   await download(
     'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZOIHTWEBlwu8Q.ttf',
     path.join(fontDir, 'DMSans-Regular.ttf')
   );
-  // DM Sans Light
-  await download(
-    'https://fonts.gstatic.com/s/dmsans/v15/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAop-hSA.ttf',
-    path.join(fontDir, 'DMSans-Light.ttf')
-  );
 
   GlobalFonts.registerFromPath(path.join(fontDir, 'PlayfairDisplay-Italic.ttf'), 'Playfair');
   GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Regular.ttf'), 'DMSans');
-  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Light.ttf'), 'DMSansLight');
+  console.log('Fonts registered');
 
-  const registered = GlobalFonts.families;
-  console.log('Registered fonts:', registered.map(f => f.family).join(', '));
-
-  // --- 2. Load quotes, use PACIFIC time for today ---
+  // --- 2. Load quotes, Pacific time ---
   const quotes = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'public', 'quotes.json'), 'utf8')
   );
 
-  // Get today in Pacific time (GitHub Actions runs UTC)
   const nowUTC = new Date();
   const pacific = new Date(nowUTC.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
   pacific.setHours(0, 0, 0, 0);
 
-  const epoch = new Date(2026, 0, 1); // Jan 1 2026
+  const epoch = new Date(2026, 0, 1);
   const dayIndex = Math.floor((pacific - epoch) / 86400000);
   const idx = dayIndex % quotes.length;
   const q = quotes[idx];
@@ -75,29 +63,12 @@ async function main() {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  // Background gradient
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#161413');
-  g.addColorStop(0.5, '#111010');
-  g.addColorStop(1, '#0d0c0b');
-  ctx.fillStyle = g;
+  // Flat background
+  ctx.fillStyle = '#111010';
   ctx.fillRect(0, 0, W, H);
-
-  // Radial glow
-  const rg = ctx.createRadialGradient(W / 2, H * 0.35, 0, W / 2, H * 0.35, W * 0.5);
-  rg.addColorStop(0, 'rgba(200,168,110,0.06)');
-  rg.addColorStop(1, 'transparent');
-  ctx.fillStyle = rg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Opening quote mark
-  ctx.fillStyle = 'rgba(200,168,110,0.35)';
-  ctx.font = 'italic 140px Playfair';
   ctx.textAlign = 'center';
-  ctx.fillText('\u201C', W / 2, 240);
 
-  // Quote text - word wrap
-  ctx.fillStyle = '#f0ebe3';
+  // Word-wrap the quote first to know total height
   const fontSize = q.q.length > 300 ? 32 : q.q.length > 150 ? 38 : 44;
   ctx.font = `italic ${fontSize}px Playfair`;
 
@@ -117,42 +88,58 @@ async function main() {
   if (line) lines.push(line);
 
   const lineHeight = fontSize * 1.7;
-  const textHeight = lines.length * lineHeight;
-  const startY = (H - textHeight) / 2 + 40;
 
+  // Calculate total block height, then center it
+  const qmarkHeight = 100;     // open quote mark
+  const gapAfterOpen = 40;     // space between open mark and text
+  const textBlockH = lines.length * lineHeight;
+  const gapBeforeClose = 30;   // space between text and close mark
+  const closeMarkH = 80;       // close quote mark
+  const gapBeforeRule = 50;    // space before rule line
+  const ruleToAuthor = 45;     // space from rule to author
+
+  const totalH = qmarkHeight + gapAfterOpen + textBlockH + gapBeforeClose + closeMarkH + gapBeforeRule + ruleToAuthor + 24;
+  const topY = (H - totalH) / 2;
+
+  let y = topY;
+
+  // Opening quote mark
+  ctx.fillStyle = 'rgba(200,168,110,0.4)';
+  ctx.font = 'italic 140px Playfair';
+  ctx.fillText('\u201C', W / 2, y + qmarkHeight);
+  y += qmarkHeight + gapAfterOpen;
+
+  // Quote lines
+  ctx.fillStyle = '#f0ebe3';
+  ctx.font = `italic ${fontSize}px Playfair`;
   for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], W / 2, startY + i * lineHeight);
+    ctx.fillText(lines[i], W / 2, y + (i + 1) * lineHeight);
   }
+  y += textBlockH + gapBeforeClose;
 
   // Closing quote mark
-  ctx.fillStyle = 'rgba(200,168,110,0.35)';
+  ctx.fillStyle = 'rgba(200,168,110,0.4)';
   ctx.font = 'italic 140px Playfair';
-  ctx.fillText('\u201D', W / 2, startY + lines.length * lineHeight + 60);
+  ctx.fillText('\u201D', W / 2, y + closeMarkH);
+  y += closeMarkH + gapBeforeRule;
 
   // Rule line
-  const ruleY = startY + lines.length * lineHeight + 110;
-  ctx.strokeStyle = 'rgba(200,168,110,0.3)';
+  ctx.strokeStyle = 'rgba(200,168,110,0.35)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(W / 2 - 30, ruleY);
-  ctx.lineTo(W / 2 + 30, ruleY);
+  ctx.moveTo(W / 2 - 30, y);
+  ctx.lineTo(W / 2 + 30, y);
   ctx.stroke();
 
   // Author
-  ctx.fillStyle = 'rgba(240,235,227,0.5)';
-  ctx.font = '22px DMSans';
-  ctx.fillText(q.a.toUpperCase(), W / 2, ruleY + 45);
+  y += ruleToAuthor;
+  ctx.fillStyle = 'rgba(240,235,227,0.7)';
+  ctx.font = '24px DMSans';
+  ctx.fillText(q.a.toUpperCase(), W / 2, y);
 
-  // Tags
-  if (q.t && q.t.length) {
-    ctx.fillStyle = 'rgba(200,168,110,0.25)';
-    ctx.font = '16px DMSansLight';
-    ctx.fillText(q.t.map(t => '#' + t).join('  '), W / 2, ruleY + 80);
-  }
-
-  // AXITOME watermark
-  ctx.fillStyle = 'rgba(240,235,227,0.12)';
-  ctx.font = '14px DMSansLight';
+  // AXITOME watermark (always at bottom)
+  ctx.fillStyle = 'rgba(240,235,227,0.15)';
+  ctx.font = '14px DMSans';
   ctx.fillText('AXITOME', W / 2, H - 50);
 
   // Save
@@ -171,10 +158,9 @@ async function main() {
   const mediaId = await client.v1.uploadMedia(imagePath);
   console.log('Image uploaded');
 
-  // Clean tweet: quote + author on same flow, simple link
   let tweetQuote = q.q;
   const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
-  const maxLen = 280 - suffix.length - 2; // 2 for curly quotes
+  const maxLen = 280 - suffix.length - 2;
 
   if (tweetQuote.length > maxLen) {
     tweetQuote = tweetQuote.substring(0, maxLen - 3) + '...';
