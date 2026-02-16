@@ -22,36 +22,53 @@ function download(url, dest) {
 }
 
 async function main() {
-  // --- 1. Download fonts ---
+  // --- 1. Download and register fonts ---
   const fontDir = '/tmp/fonts';
   if (!fs.existsSync(fontDir)) fs.mkdirSync(fontDir);
 
   console.log('Downloading fonts...');
+
+  // Playfair Display Regular Italic
   await download(
     'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtbK-F2rA0s.ttf',
     path.join(fontDir, 'PlayfairDisplay-Italic.ttf')
   );
+  // DM Sans Regular
+  await download(
+    'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZOIHTWEBlwu8Q.ttf',
+    path.join(fontDir, 'DMSans-Regular.ttf')
+  );
+  // DM Sans Light
   await download(
     'https://fonts.gstatic.com/s/dmsans/v15/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAop-hSA.ttf',
     path.join(fontDir, 'DMSans-Light.ttf')
   );
 
   GlobalFonts.registerFromPath(path.join(fontDir, 'PlayfairDisplay-Italic.ttf'), 'Playfair');
-  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Light.ttf'), 'DMSans');
-  console.log('Fonts loaded');
+  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Regular.ttf'), 'DMSans');
+  GlobalFonts.registerFromPath(path.join(fontDir, 'DMSans-Light.ttf'), 'DMSansLight');
 
-  // --- 2. Load quotes and find today's ---
+  const registered = GlobalFonts.families;
+  console.log('Registered fonts:', registered.map(f => f.family).join(', '));
+
+  // --- 2. Load quotes, use PACIFIC time for today ---
   const quotes = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'public', 'quotes.json'), 'utf8')
   );
 
-  const startDate = new Date('2026-01-01T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dayIndex = Math.floor((today - startDate) / 86400000) % quotes.length;
-  const q = quotes[dayIndex];
+  // Get today in Pacific time (GitHub Actions runs UTC)
+  const nowUTC = new Date();
+  const pacific = new Date(nowUTC.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  pacific.setHours(0, 0, 0, 0);
 
-  console.log(`Today's quote (#${dayIndex}): "${q.q.substring(0, 50)}..." — ${q.a}`);
+  const epoch = new Date(2026, 0, 1); // Jan 1 2026
+  const dayIndex = Math.floor((pacific - epoch) / 86400000);
+  const idx = dayIndex % quotes.length;
+  const q = quotes[idx];
+
+  console.log(`Pacific date: ${pacific.toISOString().split('T')[0]}`);
+  console.log(`Day index: ${dayIndex}, Quote #${idx}`);
+  console.log(`"${q.q.substring(0, 60)}..." — ${q.a}`);
 
   // --- 3. Generate 1080x1080 quote card ---
   const W = 1080, H = 1080;
@@ -75,14 +92,14 @@ async function main() {
 
   // Opening quote mark
   ctx.fillStyle = 'rgba(200,168,110,0.35)';
-  ctx.font = 'italic 140px "Playfair"';
+  ctx.font = 'italic 140px Playfair';
   ctx.textAlign = 'center';
   ctx.fillText('\u201C', W / 2, 240);
 
-  // Quote text
+  // Quote text - word wrap
   ctx.fillStyle = '#f0ebe3';
   const fontSize = q.q.length > 300 ? 32 : q.q.length > 150 ? 38 : 44;
-  ctx.font = `italic ${fontSize}px "Playfair"`;
+  ctx.font = `italic ${fontSize}px Playfair`;
 
   const maxWidth = W - 180;
   const words = q.q.split(' ');
@@ -109,7 +126,7 @@ async function main() {
 
   // Closing quote mark
   ctx.fillStyle = 'rgba(200,168,110,0.35)';
-  ctx.font = 'italic 140px "Playfair"';
+  ctx.font = 'italic 140px Playfair';
   ctx.fillText('\u201D', W / 2, startY + lines.length * lineHeight + 60);
 
   // Rule line
@@ -123,25 +140,24 @@ async function main() {
 
   // Author
   ctx.fillStyle = 'rgba(240,235,227,0.5)';
-  ctx.font = '22px "DMSans"';
+  ctx.font = '22px DMSans';
   ctx.fillText(q.a.toUpperCase(), W / 2, ruleY + 45);
 
   // Tags
   if (q.t && q.t.length) {
     ctx.fillStyle = 'rgba(200,168,110,0.25)';
-    ctx.font = '16px "DMSans"';
+    ctx.font = '16px DMSansLight';
     ctx.fillText(q.t.map(t => '#' + t).join('  '), W / 2, ruleY + 80);
   }
 
   // AXITOME watermark
   ctx.fillStyle = 'rgba(240,235,227,0.12)';
-  ctx.font = '14px "DMSans"';
+  ctx.font = '14px DMSansLight';
   ctx.fillText('AXITOME', W / 2, H - 50);
 
-  // Save image
+  // Save
   const imagePath = '/tmp/quote-card.png';
-  const buffer = canvas.toBuffer('image/png');
-  fs.writeFileSync(imagePath, buffer);
+  fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
   console.log('Quote card generated');
 
   // --- 4. Post to Twitter ---
@@ -153,18 +169,18 @@ async function main() {
   });
 
   const mediaId = await client.v1.uploadMedia(imagePath);
-  console.log('Image uploaded, mediaId:', mediaId);
+  console.log('Image uploaded');
 
-  const dateStr = today.toISOString().split('T')[0];
+  // Clean tweet: quote + author on same flow, simple link
   let tweetQuote = q.q;
-  const link = `\n\naxitome.com/#${dateStr}`;
-  const maxQuoteLen = 280 - q.a.length - link.length - 6;
+  const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
+  const maxLen = 280 - suffix.length - 2; // 2 for curly quotes
 
-  if (tweetQuote.length > maxQuoteLen) {
-    tweetQuote = tweetQuote.substring(0, maxQuoteLen - 3) + '...';
+  if (tweetQuote.length > maxLen) {
+    tweetQuote = tweetQuote.substring(0, maxLen - 3) + '...';
   }
 
-  const tweetText = `\u201C${tweetQuote}\u201D\n\u2014 ${q.a}${link}`;
+  const tweetText = `\u201C${tweetQuote}\u201D${suffix}`;
 
   await client.v2.tweet({
     text: tweetText,
