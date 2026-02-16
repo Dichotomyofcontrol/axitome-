@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs at 8:00 AM Pacific (16:00 UTC) every day
     # Adjust the hour if you want a different post time
-    - cron: '0 16 * * *'
+    - cron: '0 13 * * *'
   workflow_dispatch: # Allows manual trigger for testing
 
 jobs:
