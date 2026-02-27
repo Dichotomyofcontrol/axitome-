@@ -129,33 +129,9 @@ async function main() {
 
   const mediaId = await client.v1.uploadMedia(imagePath);
 
-  // Build tweet text, then truncate if over 280
-  // X counts URLs as 23 chars regardless of actual length (t.co wrapping)
-  const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
-  const URL_TCO_LENGTH = 23;
+  const tweetText = `Today\u2019s quote by ${q.a}\n\naxitome.com`;
 
-  // X counts t.co-wrapped URLs as 23 chars, so calculate the "X-perceived" length
-  function xLength(text) {
-    return text.replace('axitome.com', 'x'.repeat(URL_TCO_LENGTH)).length;
-  }
-
-  let tweetText = `\u201C${q.q}\u201D${suffix}`;
-
-  if (xLength(tweetText) > 280) {
-    // Truncate the quote to fit within 280 X-perceived chars
-    const overhead = xLength(`\u201C\u201D${suffix}...`);
-    const available = 280 - overhead;
-    // Trim to available chars, then cut at last space for clean break
-    let trimmed = q.q.substring(0, available);
-    const lastSpace = trimmed.lastIndexOf(' ');
-    if (lastSpace > available * 0.7) {
-      trimmed = trimmed.substring(0, lastSpace);
-    }
-    tweetText = `\u201C${trimmed}...\u201D${suffix}`;
-  }
-
-  console.log('Tweet length (actual):', tweetText.length);
-  console.log('Tweet length (X-perceived):', xLength(tweetText));
+  console.log('Tweet length:', tweetText.length);
 
   await client.v2.tweet({
     text: tweetText,
