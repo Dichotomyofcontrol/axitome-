@@ -129,9 +129,24 @@ async function main() {
 
   const mediaId = await client.v1.uploadMedia(imagePath);
 
-  const tweetText = `Today\u2019s quote by ${q.a}\n\naxitome.com`;
+  // X counts URLs as 23 chars regardless of actual length (t.co wrapping)
+  const URL_TCO_LENGTH = 23;
+  function xLength(text) {
+    return text.replace('axitome.com', 'x'.repeat(URL_TCO_LENGTH)).length;
+  }
 
-  console.log('Tweet length:', tweetText.length);
+  // Try full quote first; if too long, fall back to simple format
+  const fullText = `\u201C${q.q}\u201D \u2014 ${q.a}\n\naxitome.com`;
+  let tweetText;
+
+  if (xLength(fullText) <= 280) {
+    tweetText = fullText;
+  } else {
+    tweetText = `Today\u2019s quote by ${q.a}\n\naxitome.com`;
+  }
+
+  console.log('Tweet length (X-perceived):', xLength(tweetText));
+  console.log('Tweet text:', tweetText);
 
   await client.v2.tweet({
     text: tweetText,
@@ -139,7 +154,6 @@ async function main() {
   });
 
   console.log('Posted!');
-  console.log(tweetText);
 }
 
 main().catch(err => {
