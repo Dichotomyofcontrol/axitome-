@@ -127,7 +127,15 @@ async function main() {
     accessSecret: process.env.TWITTER_ACCESS_SECRET,
   });
 
-  const mediaId = await client.v1.uploadMedia(imagePath);
+  let mediaId;
+  try {
+    console.log('Uploading media...');
+    mediaId = await client.v1.uploadMedia(imagePath);
+    console.log('Media uploaded, id:', mediaId);
+  } catch (err) {
+    console.error('Media upload failed:', JSON.stringify(err.data || err.message || err));
+    console.log('Attempting tweet without image...');
+  }
 
   let tweetQuote = q.q;
   const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
@@ -138,10 +146,12 @@ async function main() {
 
   const tweetText = `\u201C${tweetQuote}\u201D${suffix}`;
 
-  await client.v2.tweet({
-    text: tweetText,
-    media: { media_ids: [mediaId] },
-  });
+  const tweetPayload = mediaId
+    ? { text: tweetText, media: { media_ids: [mediaId] } }
+    : { text: tweetText };
+
+  console.log('Sending tweet...');
+  await client.v2.tweet(tweetPayload);
 
   console.log('Posted!');
   console.log(tweetText);
