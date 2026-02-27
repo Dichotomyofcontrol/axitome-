@@ -127,31 +127,40 @@ async function main() {
     accessSecret: process.env.TWITTER_ACCESS_SECRET,
   });
 
-  let mediaId;
-  try {
-    console.log('Uploading media...');
-    mediaId = await client.v1.uploadMedia(imagePath);
-    console.log('Media uploaded, id:', mediaId);
-  } catch (err) {
-    console.error('Media upload failed:', JSON.stringify(err.data || err.message || err));
-    console.log('Attempting tweet without image...');
+  const mediaId = await client.v1.uploadMedia(imagePath);
+
+  // Build tweet text, then truncate if over 280
+  // X counts URLs as 23 chars regardless of actual length (t.co wrapping)
+  const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
+  const URL_TCO_LENGTH = 23;
+
+  // X counts t.co-wrapped URLs as 23 chars, so calculate the "X-perceived" length
+  function xLength(text) {
+    return text.replace('axitome.com', 'x'.repeat(URL_TCO_LENGTH)).length;
   }
 
-  let tweetQuote = q.q;
-  const suffix = ` \u2014 ${q.a}`;
-  const maxLen = 280 - suffix.length - 2;
-  if (tweetQuote.length > maxLen) {
-    tweetQuote = tweetQuote.substring(0, maxLen - 3) + '...';
+  let tweetText = `\u201C${q.q}\u201D${suffix}`;
+
+  if (xLength(tweetText) > 280) {
+    // Truncate the quote to fit within 280 X-perceived chars
+    const overhead = xLength(`\u201C\u201D${suffix}...`);
+    const available = 280 - overhead;
+    // Trim to available chars, then cut at last space for clean break
+    let trimmed = q.q.substring(0, available);
+    const lastSpace = trimmed.lastIndexOf(' ');
+    if (lastSpace > available * 0.7) {
+      trimmed = trimmed.substring(0, lastSpace);
+    }
+    tweetText = `\u201C${trimmed}...\u201D${suffix}`;
   }
 
-  const tweetText = `\u201C${tweetQuote}\u201D${suffix}`;
+  console.log('Tweet length (actual):', tweetText.length);
+  console.log('Tweet length (X-perceived):', xLength(tweetText));
 
-  const tweetPayload = mediaId
-    ? { text: tweetText, media: { media_ids: [mediaId] } }
-    : { text: tweetText };
-
-  console.log('Sending tweet...');
-  await client.v2.tweet(tweetPayload);
+  await client.v2.tweet({
+    text: tweetText,
+    media: { media_ids: [mediaId] },
+  });
 
   console.log('Posted!');
   console.log(tweetText);
