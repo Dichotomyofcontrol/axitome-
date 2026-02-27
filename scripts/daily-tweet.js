@@ -138,7 +138,7 @@ async function main() {
   }
 
   let tweetQuote = q.q;
-  const suffix = ` \u2014 ${q.a}\n\naxitome.com`;
+  const suffix = ` \u2014 ${q.a}`;
   const maxLen = 280 - suffix.length - 2;
   if (tweetQuote.length > maxLen) {
     tweetQuote = tweetQuote.substring(0, maxLen - 3) + '...';
