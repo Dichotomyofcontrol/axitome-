@@ -1,0 +1,23 @@
+name: Update Quotes File
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and update quotes.json
+        run: |
+          curl -s https://n.uguu.se/aRjrnCmB.json -o public/quotes.json
+          echo "Downloaded $(python3 -c "import json; d=json.load(open('public/quotes.json')); print(len(d))") quotes"
+
+      - name: Commit and push
+        run: |
+          git config user.email "163231466+Dichotomyofcontrol@users.noreply.github.com"
+          git config user.name "Dichotomyofcontrol"
+          git add public/quotes.json
+          git commit --amend --no-edit
+          git push --force-with-lease
