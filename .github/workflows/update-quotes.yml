@@ -18,14 +18,18 @@ jobs:
 
       - name: Download and update quotes.json
         run: |
-          curl -fsSL https://n.uguu.se/aRjrnCmB.json -o public/quotes.json
+          curl -fsSL https://o.uguu.se/azJysuUl.json -o public/quotes.json
           QUOTE_COUNT=$(python3 -c "import json; d=json.load(open('public/quotes.json')); print(len(d))")
           echo "Downloaded ${QUOTE_COUNT} quotes"
+          if [ "$QUOTE_COUNT" -ne 744 ]; then
+            echo "ERROR: Expected 744 quotes, got ${QUOTE_COUNT}"
+            exit 1
+          fi
 
       - name: Commit and push
         run: |
           git config user.email "163231466+Dichotomyofcontrol@users.noreply.github.com"
           git config user.name "Dichotomyofcontrol"
           git add public/quotes.json
-          git diff --staged --quiet || git commit -m "Add new quote: James Clear - If the path is crowded, differentiate"
+          git diff --staged --quiet || git commit -m "Add new quote: Naval Ravikant - You escape competition through authenticity"
           git push
